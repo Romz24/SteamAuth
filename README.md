@@ -1,5 +1,5 @@
 # SteamAuth
-A C# library that provides vital Steam Mobile Authenticator functionality. **Looking for a desktop client to act as a Steam Mobile Authenticator? [Check out SteamDesktopAuthenticator](https://github.com/Jessecar96/SteamDesktopAuthenticator)**
+A C# library that provides vital Steam Mobile Authenticator functionality. **Looking for a desktop client to act as a Steam Mobile Authenticator? [Check out SteamDesktopAuthenticator](https://github.com/Romz24/SteamDesktopAuthenticator)**
 
 # Functionality
 Currently, this library can:
