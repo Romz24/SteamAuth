@@ -92,14 +92,47 @@ namespace SteamAuth
             return GenerateSteamGuardCodeForTime(await TimeAligner.GetSteamTimeAsync());
         }
         
-        public async Task<bool> SignInViaQR(string idOfQR) { 
+        public async Task<bool> SignInViaQR(string qrUrl) {
+            // QR challenge URLs look like https://s.team/q/{version}/{clientId}
+            var match = Regex.Match(qrUrl, @"^https?://s\.team/q/(\d+)/(\d+)");
+            if (!match.Success) return false;
+
+            ushort version = ushort.Parse(match.Groups[1].Value);
+            ulong clientId = ulong.Parse(match.Groups[2].Value);
+            ulong steamId = this.Session.SteamID;
+
+            // Confirming a QR login requires a signature over {version, client_id, steamid},
+            // HMAC-SHA256'd with the shared secret, not a typed Steam Guard code.
+            byte[] signatureData = new byte[18];
+            BitConverter.GetBytes(version).CopyTo(signatureData, 0);
+            BitConverter.GetBytes(clientId).CopyTo(signatureData, 2);
+            BitConverter.GetBytes(steamId).CopyTo(signatureData, 10);
+            if (!BitConverter.IsLittleEndian)
+            {
+                Array.Reverse(signatureData, 0, 2);
+                Array.Reverse(signatureData, 2, 8);
+                Array.Reverse(signatureData, 10, 8);
+            }
+
+            string sharedSecretUnescaped = Regex.Unescape(this.SharedSecret);
+            byte[] sharedSecretArray = Convert.FromBase64String(sharedSecretUnescaped);
+
+            byte[] signature;
+            using (var hmac = new HMACSHA256(sharedSecretArray))
+            {
+                signature = hmac.ComputeHash(signatureData);
+            }
+
             var postBody = new NameValueCollection();
-            postBody.Add("client_id", idOfQR);
-            postBody.Add("steamid", this.Session.SteamID.ToString());
-            postBody.Add("code", GenerateSteamGuardCode());
-            postBody.Add("code_type", "3");
-            var response = await SteamWeb.POSTRequest("https://api.steampowered.com/IAuthenticationService/UpdateAuthSessionWithSteamGuardCode/v1/", null, postBody, "X-eresult");
-            
+            postBody.Add("version", version.ToString());
+            postBody.Add("client_id", clientId.ToString());
+            postBody.Add("steamid", steamId.ToString());
+            postBody.Add("signature", Convert.ToBase64String(signature));
+            postBody.Add("confirm", "true");
+            postBody.Add("persistence", "1");
+
+            var response = await SteamWeb.POSTRequest("https://api.steampowered.com/IAuthenticationService/UpdateAuthSessionWithMobileConfirmation/v1/?access_token=" + this.Session.AccessToken, null, postBody, "X-eresult");
+
             return response == "1";
         }
 
